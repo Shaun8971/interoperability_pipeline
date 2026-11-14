@@ -1,0 +1,24 @@
+# Runs the FHIR server (the "hub" of the pipeline) locally.
+#   Start:  docker compose up -d
+#   Stop:   docker compose down
+#   Logs:   docker compose logs -f hapi
+# Base URL once running: http://localhost:8080/fhir
+# More services (payer simulator, portal) can be added here in later modules.
+services:
+  hapi:
+    image: hapiproject/hapi:latest   # HAPI FHIR JPA server, FHIR R4 by default
+    ports:
+      - "8080:8080"                  # host:container
+    volumes:
+      # Keep data between restarts. Delete the "hapi-data" volume to reset to empty.
+      - hapi-data:/data/hapi
+    environment:
+      # Store data in a file-based H2 database inside the volume above.
+      spring.datasource.url: "jdbc:h2:file:/data/hapi/h2;DB_CLOSE_DELAY=-1"
+      spring.datasource.username: sa
+      spring.datasource.password: ""
+      spring.datasource.driverClassName: org.h2.Driver
+      spring.jpa.properties.hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirH2Dialect
+
+volumes:
+  hapi-data:

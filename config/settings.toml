@@ -1,0 +1,13 @@
+# Non-secret configuration. Secrets (tokens, private keys) go in .env, never here.
+
+[fhir]
+# Base URL of the FHIR R4 server (the hub). Local HAPI started by docker-compose.yml.
+base_url = "http://localhost:8080/fhir"
+# Seconds to wait for the FHIR server before treating the call as failed.
+timeout_seconds = 10
+
+[mllp]
+# Where the HL7 v2 listener accepts connections (Module 1).
+host = "127.0.0.1"
+# 2575 is the port conventionally registered for HL7 over MLLP.
+port = 2575
