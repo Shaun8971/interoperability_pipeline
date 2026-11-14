@@ -96,3 +96,13 @@ def find_segment(segments: list[list[str]], segment_name: str) -> list[str] | No
         ['PID', '1']
     """
     return next((segment for segment in segments if segment[0] == segment_name), None)
+
+
+def find_segments(segments: list[list[str]], segment_name: str) -> list[list[str]]:
+    """Return every segment with this name, in message order (a lab message can have many OBX).
+
+    Example:
+        >>> find_segments([["OBX", "1"], ["PID"], ["OBX", "2"]], "OBX")
+        [['OBX', '1'], ['OBX', '2']]
+    """
+    return [segment for segment in segments if segment[0] == segment_name]

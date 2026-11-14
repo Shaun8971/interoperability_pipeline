@@ -5,8 +5,10 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+from interoperability_pipeline.fhir.client import FhirWriteResult
 from interoperability_pipeline.hl7v2.ack import build_ack
 from interoperability_pipeline.hl7v2.listener import handle_connection
+from interoperability_pipeline.hl7v2.mappers import SourceConfig
 from interoperability_pipeline.hl7v2.mllp import MllpFrameReader, frame, unframe
 from interoperability_pipeline.hl7v2.parser import find_segment, get_field, split_message
 from interoperability_pipeline.hl7v2.validation import validate_message
@@ -56,10 +58,27 @@ def test_error_ack_carries_the_reason_without_breaking_structure() -> None:
     assert msa[3] == "PID-3 patient identifier is empty"
 
 
+class FakeFhirClient:
+    """Stands in for the FHIR server so ACK tests need no network."""
+
+    def conditional_update(self, resource_type, search_params, resource):  # type: ignore[no-untyped-def]
+        return FhirWriteResult(resource_type, "1", created=True)
+
+
+SOURCE_CONFIG = SourceConfig(
+    patient_identifier_systems={"MERCY": "http://mercy-general.example.org/mrn"},
+    visit_identifier_systems={"MERCY": "http://mercy-general.example.org/visit"},
+    observation_identifier_systems={"MERCY": "http://mercy-general.example.org/lab-result"},
+    timezone="America/New_York",
+)
+
+
 def _round_trip(message_text: str) -> list[str]:
     """Send a framed message through handle_connection; return the ACK's MSA fields."""
     sender, receiver = socket.socketpair()
-    worker = threading.Thread(target=handle_connection, args=(receiver,))
+    worker = threading.Thread(
+        target=handle_connection, args=(receiver, FakeFhirClient(), SOURCE_CONFIG)
+    )
     worker.start()
     sender.sendall(frame(message_text))
     ack_frame = MllpFrameReader(sender).read_frame()

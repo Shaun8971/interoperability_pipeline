@@ -3,7 +3,7 @@ name = "interoperability-pipeline"
 version = "0.1.0"
 description = "Learning project: one synthetic patient through HL7 v2, FHIR, X12 and SMART."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["requests"]  # HTTP client for the FHIR server
 
 [project.optional-dependencies]
 dev = ["ruff", "pytest"]

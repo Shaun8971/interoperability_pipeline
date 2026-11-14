@@ -14,3 +14,19 @@ class PipelineError(Exception):
 
 class MllpFramingError(PipelineError):
     """Bytes on the wire did not follow MLLP framing (missing or misplaced markers)."""
+
+
+class MappingError(PipelineError):
+    """A message was valid HL7 but could not be mapped to FHIR (bad date, unknown authority)."""
+
+
+class FhirError(PipelineError):
+    """The FHIR server refused or could not be reached.
+
+    ``retryable`` is True when the same message might succeed later (server down,
+    5xx) and False when resending it unchanged would fail again (4xx).
+    """
+
+    def __init__(self, message: str, *, retryable: bool) -> None:
+        super().__init__(message)
+        self.retryable = retryable

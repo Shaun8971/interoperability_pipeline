@@ -10,11 +10,18 @@ How to extend: add a message type to SUPPORTED_MESSAGE_TYPES when a mapper exist
 for it (A08, A13 later); add a rule by appending to the problems list.
 """
 
-from interoperability_pipeline.hl7v2.parser import find_segment, get_field, split_components
+from interoperability_pipeline.hl7v2.parser import (
+    find_segment,
+    find_segments,
+    get_field,
+    split_components,
+)
 
 # --- Segment names ---------------------------------------------------------------
 SEGMENT_MSH = "MSH"  # message header
 SEGMENT_PID = "PID"  # patient identification
+SEGMENT_OBX = "OBX"  # one observation result
+MESSAGE_CODE_RESULT = "ORU"  # MSH-9.1 for lab/observation results
 
 # --- Supported message types: (MSH-9.1 message code, MSH-9.2 trigger event) ---------
 SUPPORTED_MESSAGE_TYPES = {
@@ -53,4 +60,6 @@ def validate_message(segments: list[list[str]]) -> list[str]:
         problems.append("missing PID segment")
     elif not get_field(pid, 3).strip():  # PID-3: patient identifier list (the MRN)
         problems.append("PID-3 patient identifier is empty")
+    if message_type[0] == MESSAGE_CODE_RESULT and not find_segments(segments, SEGMENT_OBX):
+        problems.append("result message has no OBX segment")  # nothing to store would be silent
     return problems

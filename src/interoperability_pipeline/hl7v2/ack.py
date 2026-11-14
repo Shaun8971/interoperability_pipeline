@@ -17,6 +17,7 @@ from interoperability_pipeline.hl7v2.parser import find_segment, get_field, spli
 # --- Acknowledgment codes (MSA-1) ------------------------------------------------
 ACK_ACCEPT = "AA"  # processed; the sender may forget the message
 ACK_ERROR = "AE"  # understood but not processed; the sender must fix and resend
+ACK_REJECT = "AR"  # not processed for reasons unrelated to content (e.g. FHIR down); resend later
 
 # --- Fixed pieces of the ACK -----------------------------------------------------
 SEGMENT_SEPARATOR = "\r"  # HL7 v2 ends every segment with a carriage return
@@ -31,17 +32,23 @@ ACK_CONTROL_ID_PREFIX = "ACK-"  # our ACK's own MSH-10 = prefix + original contr
 _RESERVED_CHARACTERS = "|^~\\&\r\n"
 
 
-def build_ack(segments: list[list[str]], problems: list[str], now: datetime) -> str:
+def build_ack(
+    segments: list[list[str]],
+    problems: list[str],
+    now: datetime,
+    code: str | None = None,
+) -> str:
     """Build the ACK for a received message.
 
     ``now`` is passed in (not read from the clock) so tests are deterministic.
+    ``code`` overrides the default (use AR when the failure is not the message's fault).
 
     Example (segments of Jane's A01, no problems):
         MSH|^~\\&|PIPELINE|FHIRHUB|HOSPSIM|MERCY_GENERAL|20261114093000||ACK^A01|ACK-MSG00001|P|2.5.1
         MSA|AA|MSG00001
     """
     original_msh = find_segment(segments, "MSH") or ["MSH"]
-    code = ACK_ERROR if problems else ACK_ACCEPT
+    code = code or (ACK_ERROR if problems else ACK_ACCEPT)  # default: AE if problems, else AA
     original_control_id = get_field(original_msh, 10)  # MSH-10: control ID of the original
     trigger_event = (split_components(get_field(original_msh, 9)) + ["", ""])[1]  # MSH-9.2
 
