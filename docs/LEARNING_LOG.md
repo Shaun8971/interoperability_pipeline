@@ -15,3 +15,10 @@ One entry per checkpoint: the concept, what we built, what I got wrong and the c
 - **Built:** `hl7v2/parser.py` (split segment/components, `get_field` with the MSH offset), `hl7v2/mllp.py` (`frame`, `unframe`, `MllpFrameReader`), a listener that prints raw bytes, and a hospital sender. Read PID-3, PID-5, PID-7 by hand and matched the parser.
 - **What I got wrong / terminology:** I said "record"; the HL7 unit is a *message* made of *segments*. The parser never sees the markers: the listener cuts out one message with them and `unframe` strips them first. Back-to-back messages are only half the problem: TCP can also split one message across reads, so the end marker tells the receiver when to stop waiting.
 - **Sources:** https://confluence.hl7.org/display/INTEROP/MLLP , https://hl7-definition.caristix.com/v2/HL7v2.5.1/Segments/PID
+
+## Checkpoint 1.2: ACKs (AA / AE / no ACK)
+
+- **Concept:** the receiver answers each message with an ACK: MSH (parties swapped) + MSA (`AA` accept / `AE` error, the original MSH-10 echoed in MSA-2, optional reason in MSA-3).
+- **Built:** `hl7v2/validation.py` (rules: MSH present, MSH-10 present, supported type, PID-3 non-empty), `hl7v2/ack.py`, listener replies with a framed ACK and logs `control_id=...`, sender prints the ACK or reports a timeout.
+- **What I got wrong / missed:** on AE I said "fix and resend", which is right, but resending the *unchanged* message just repeats the AE, so fix the data first (or send it to a human). On no-ACK I listed possible causes but missed the core problem: the sender cannot tell "never arrived" from "arrived, ACK lost". Resending risks a duplicate; not resending risks loss. Fix: resend with the *same control ID* (bounded retries, then alert) and make the receiver idempotent.
+- **Sources:** https://hl7-definition.caristix.com/v2/HL7v2.5.1/Segments/MSA , https://hl7-definition.caristix.com/v2/HL7v2.5.1/Segments/MSH

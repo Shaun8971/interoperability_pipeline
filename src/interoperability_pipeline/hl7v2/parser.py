@@ -86,3 +86,13 @@ def get_field(segment_fields: list[str], field_number: int) -> str:
     if position < 0 or position >= len(segment_fields):
         return ""  # absent and empty are treated the same, as HL7 intends
     return segment_fields[position]
+
+
+def find_segment(segments: list[list[str]], segment_name: str) -> list[str] | None:
+    """Return the first segment with this name, or None if the message has none.
+
+    Example:
+        >>> find_segment([["MSH", "x"], ["PID", "1"]], "PID")
+        ['PID', '1']
+    """
+    return next((segment for segment in segments if segment[0] == segment_name), None)

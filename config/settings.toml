@@ -11,3 +11,5 @@ timeout_seconds = 10
 host = "127.0.0.1"
 # 2575 is the port conventionally registered for HL7 over MLLP.
 port = 2575
+# Seconds the sender waits for an ACK before treating the message as unacknowledged.
+ack_timeout_seconds = 3
