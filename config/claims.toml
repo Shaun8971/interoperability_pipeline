@@ -1,0 +1,64 @@
+# Module 2 configuration: everything synthetic. Nothing here is a real person, plan or provider.
+# Money is written as strings of dollars and cents so it never passes through floating point.
+
+[interchange]
+# Envelope values (ISA/GS). The IDs are padded to 15 characters automatically.
+sender_id = "MERCYGENERAL"  # ISA06 / GS02: who sends the claim
+receiver_id = "SYNTHPLAN"  # ISA08 / GS03: who receives it
+usage_indicator = "T"  # ISA15: T = test data, P = production. Always T in this project.
+contact_name = "BILLING OFFICE"  # PER02 in the submitter loop
+contact_phone = "6075550100"  # PER04 (synthetic 555 number)
+
+[payer]
+# Who receives the claim (X12 837 loop 2010BB) and sends the 835.
+name = "SYNTHETIC HEALTH PLAN"
+payer_id = "99999"  # X12 payer identifier (NM109)
+
+[subscriber]
+# Jane as the insured person (loop 2010BA). She is the subscriber of her own plan.
+member_id = "W123456789"
+group_number = "GRP001"
+
+[billing_provider]
+# Who is billing (loop 2010AA). The NPI below is the standard documentation example NPI.
+name = "MERCY GENERAL PHYSICIANS"
+npi = "1234567893"
+tax_id = "123456789"  # synthetic EIN
+street = "1 HOSPITAL WAY"
+city = "ITHACA"
+state = "NY"
+postal_code = "14850"
+
+[identifier_systems]
+# FHIR identifier systems for the seeded clinical resources (see simulators/seed_claim_data.py).
+condition = "http://mercy-general.example.org/condition"
+procedure = "http://mercy-general.example.org/procedure"
+
+[code_systems]
+icd10 = "http://hl7.org/fhir/sid/icd-10-cm"  # FHIR's URI for ICD-10-CM diagnosis codes
+cpt = "http://www.ama-assn.org/go/cpt"  # FHIR's URI for CPT procedure codes
+
+[[diagnoses]]
+# Reason for the visit. ICD-10-CM I10 = essential (primary) hypertension.
+code = "I10"
+text = "Essential hypertension"
+
+[[procedures]]
+# CPT 99213 = established-patient office visit. charge = what the hospital bills.
+# contract_rate = the most this payer's contract allows for the service.
+code = "99213"
+text = "Office visit, established patient"
+charge = "200.00"
+contract_rate = "150.00"
+
+[[procedures]]
+# CPT 72148 = MRI of the lower spine without contrast. Needs prior authorization.
+code = "72148"
+text = "MRI lumbar spine without contrast"
+charge = "1000.00"
+contract_rate = "800.00"
+
+[payer_policy]
+# The payer simulator's rules (Checkpoint 2.2).
+coinsurance_rate = "0.20"  # Jane pays 20% of the allowed amount
+prior_auth_required_for = ["72148"]  # denied without a prior authorization number

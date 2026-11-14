@@ -15,6 +15,7 @@ from typing import Any
 # Project root = four levels up from this file (src/<package>/common/settings.py).
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SETTINGS_PATH = PROJECT_ROOT / "config" / "settings.toml"
+CLAIMS_SETTINGS_PATH = PROJECT_ROOT / "config" / "claims.toml"  # Module 2: claim and payer config
 
 
 def load_settings(path: Path = DEFAULT_SETTINGS_PATH) -> dict[str, Any]:

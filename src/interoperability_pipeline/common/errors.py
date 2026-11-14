@@ -30,3 +30,7 @@ class FhirError(PipelineError):
     def __init__(self, message: str, *, retryable: bool) -> None:
         super().__init__(message)
         self.retryable = retryable
+
+
+class X12FormatError(PipelineError):
+    """An X12 file did not follow the structure the tokenizer or parser requires."""

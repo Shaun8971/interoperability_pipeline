@@ -113,3 +113,21 @@ class FhirClient:
             raise FhirError(f"FHIR search failed: {error}", retryable=True) from error
         entries = response.json().get("entry", [])
         return entries[0]["resource"]["id"] if entries else None
+
+    def search(self, resource_type: str, search_params: dict[str, str]) -> list[dict[str, Any]]:
+        """Return the resources matching a search (first page only; fine for one patient).
+
+        Example:
+            client.search("Procedure", {"encounter": "Encounter/1001"}) -> [{...}, {...}]
+        """
+        try:
+            response = requests.get(
+                f"{self._base_url}/{resource_type}",
+                params=search_params,
+                headers={"Accept": FHIR_JSON_MEDIA_TYPE},
+                timeout=self._timeout_seconds,
+            )
+            response.raise_for_status()
+        except requests.RequestException as error:
+            raise FhirError(f"FHIR search failed: {error}", retryable=True) from error
+        return [entry["resource"] for entry in response.json().get("entry", [])]
