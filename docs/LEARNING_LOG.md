@@ -44,3 +44,11 @@ One entry per checkpoint: the concept, what we built, what I got wrong and the c
 - **Built:** `x12/adjudication.py` (reads the 837, applies the 3 rules), `x12/builder_835.py`, `simulators/payer.py`. Samples in `samples/x12/`: 837 and 835 for both scenarios.
 - **What I got wrong:** I treated billed minus allowed as something Jane pays and applied coinsurance to the *billed* amount. Correct: allowed = min(billed, contract rate); the difference is a CO-45 write-off nobody collects; coinsurance is 20% of the *allowed* amount (PR-2); the payer pays allowed minus coinsurance. Visit: 200 = 120 paid + 50 CO-45 + 30 PR-2. MRI with auth: 1000 = 640 + 200 + 160. I also said Jane would owe the denied MRI; with a CO-197 denial the provider absorbs it, so Jane owes 0 (totals: A = $190, B = $30).
 - **Sources:** https://www.stedi.com/edi/x12-005010/835 , https://www.stedi.com/edi/x12-005010/segment/CAS , https://x12.org/codes
+
+## Checkpoint 2.3: Reconcile and the EOB
+
+- **Concept:** the 835 is the payer's remittance to the *provider* (money and reasons). The FHIR ExplanationOfBenefit holds the same facts for the *patient* and apps. The **reconciler** is a bookkeeping check on the hospital's side: it only checks that the numbers inside the 835 add up (line: billed = paid + adjustments; claim totals = sum of lines; BPR02 = sum of CLP04). It does not know contract rates; those live in the payer's rules.
+- **Built:** `x12/parser_835.py` (parse + `reconcile`), `x12/eob_mapper.py` (835 -> Coverage + EOB; every amount mapped), `x12/remittance_to_fhir.py` (refuses unbalanced files, writes idempotently). Broken 835 (CO-45 50 -> 70) refused with nothing stored; good 835 stored twice = one EOB.
+- **What I got wrong:** I described the EOB as what the hospital sends the insurer for billing. That is the **837 claim**. Direction: 837 hospital -> insurer; 835 insurer -> hospital; EOB for the patient. Also unclear to me at first what the reconciler does: it checks internal arithmetic, not whether the payer applied the correct contract (that "expected payment" check is separate and not built).
+- **Gotcha learned:** HAPI caches identical searches for about a minute, so a count can look stale right after a write.
+- **Sources:** https://hl7.org/fhir/R4/explanationofbenefit.html , https://www.stedi.com/edi/x12-005010/835 , https://x12.org/codes
