@@ -62,3 +62,12 @@ contract_rate = "800.00"
 # The payer simulator's rules (Checkpoint 2.2).
 coinsurance_rate = "0.20"  # Jane pays 20% of the allowed amount
 prior_auth_required_for = ["72148"]  # denied without a prior authorization number
+
+[payer_codes]
+# Claim adjustment group and reason codes (https://x12.org/codes) the payer simulator uses.
+group_contractual = "CO"  # contractual obligation: the provider's loss, patient cannot be billed
+group_patient = "PR"  # patient responsibility: the patient owes it
+reason_fee_schedule = "45"  # charge exceeds fee schedule / contracted rate
+reason_coinsurance = "2"  # coinsurance amount
+reason_no_precertification = "197"  # precertification/authorization absent
+reason_non_covered = "96"  # non-covered charge (service not in the contract)

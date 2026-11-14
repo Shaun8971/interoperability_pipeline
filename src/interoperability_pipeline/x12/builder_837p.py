@@ -56,7 +56,7 @@ DATE_FORMAT_QUALIFIER = "D8"  # DTP02: CCYYMMDD
 PRODUCT_QUALIFIER_HCPCS = "HC"  # SV101-1: HCPCS/CPT procedure code
 UNIT_BASIS = "UN"  # SV103: units
 # Where the claim file goes by default (committed as a sample for Checkpoint 2.1).
-DEFAULT_OUTPUT = PROJECT_ROOT / "samples" / "x12" / "jane_claim_837p.x12"
+DEFAULT_OUTPUT = PROJECT_ROOT / "samples" / "x12" / "jane_claim_837p_no_auth.x12"
 
 
 def format_amount(amount: Decimal) -> str:
@@ -70,7 +70,7 @@ def format_amount(amount: Decimal) -> str:
     return text
 
 
-def _segment(*elements: str) -> str:
+def make_segment(*elements: str) -> str:
     """Join elements into one segment (without terminator); refuse values that would corrupt it."""
     for element in elements:
         if any(delimiter in element for delimiter in (ELEMENT, SEGMENT_END)):
@@ -120,7 +120,7 @@ def _loop_header(
     )
     return [
         # BHT: beginning of the claim; BHT03 = originator's reference, BHT06 CH = chargeable claim
-        _segment(
+        make_segment(
             "BHT",
             "0019",
             "00",
@@ -130,7 +130,7 @@ def _loop_header(
             "CH",
         ),
         # 1000A submitter: NM109 is the submitter's ID (ETIN)
-        _segment(
+        make_segment(
             "NM1",
             ENTITY_SUBMITTER,
             "2",
@@ -142,9 +142,9 @@ def _loop_header(
             QUALIFIER_ETIN,
             interchange["sender_id"],
         ),
-        _segment("PER", "IC", interchange["contact_name"], "TE", interchange["contact_phone"]),
+        make_segment("PER", "IC", interchange["contact_name"], "TE", interchange["contact_phone"]),
         # 1000B receiver: the payer
-        _segment(
+        make_segment(
             "NM1",
             ENTITY_RECEIVER,
             "2",
@@ -163,8 +163,10 @@ def _loop_billing_provider(config: dict[str, Any]) -> list[str]:
     """Loop 2000A/2010AA: the billing provider (hierarchical level 1)."""
     provider = config["billing_provider"]
     return [
-        _segment("HL", "1", "", "20", "1"),  # HL03 20 = information source; HL04 1 = has children
-        _segment(
+        make_segment(
+            "HL", "1", "", "20", "1"
+        ),  # HL03 20 = information source; HL04 1 = has children
+        make_segment(
             "NM1",
             ENTITY_BILLING_PROVIDER,
             "2",
@@ -176,9 +178,9 @@ def _loop_billing_provider(config: dict[str, Any]) -> list[str]:
             QUALIFIER_NPI,
             provider["npi"],
         ),
-        _segment("N3", provider["street"]),  # address line
-        _segment("N4", provider["city"], provider["state"], provider["postal_code"]),
-        _segment("REF", "EI", provider["tax_id"]),  # REF01 EI = employer identification number
+        make_segment("N3", provider["street"]),  # address line
+        make_segment("N4", provider["city"], provider["state"], provider["postal_code"]),
+        make_segment("REF", "EI", provider["tax_id"]),  # REF01 EI = employer identification number
     ]
 
 
@@ -186,10 +188,10 @@ def _loop_subscriber(claim: ClaimData, config: dict[str, Any]) -> list[str]:
     """Loop 2000B/2010BA/2010BB: the insured (Jane, the subscriber) and the payer."""
     subscriber, payer = config["subscriber"], config["payer"]
     return [
-        _segment("HL", "2", "1", "22", "0"),  # HL03 22 = subscriber; HL04 0 = no dependents
+        make_segment("HL", "2", "1", "22", "0"),  # HL03 22 = subscriber; HL04 0 = no dependents
         # SBR: P = payer is primary; 18 = patient is the subscriber (self); CI = commercial
-        _segment("SBR", "P", "18", subscriber["group_number"], "", "", "", "", "", "CI"),
-        _segment(
+        make_segment("SBR", "P", "18", subscriber["group_number"], "", "", "", "", "", "CI"),
+        make_segment(
             "NM1",
             ENTITY_INSURED,
             "1",
@@ -201,10 +203,12 @@ def _loop_subscriber(claim: ClaimData, config: dict[str, Any]) -> list[str]:
             QUALIFIER_MEMBER_ID,
             subscriber["member_id"],
         ),
-        _segment("N3", claim.street),
-        _segment("N4", claim.city, claim.state, claim.postal_code),
-        _segment("DMG", DATE_FORMAT_QUALIFIER, claim.birth_date, claim.gender),  # birth date + sex
-        _segment(
+        make_segment("N3", claim.street),
+        make_segment("N4", claim.city, claim.state, claim.postal_code),
+        make_segment(
+            "DMG", DATE_FORMAT_QUALIFIER, claim.birth_date, claim.gender
+        ),  # birth date + sex
+        make_segment(
             "NM1",
             ENTITY_PAYER,
             "2",
@@ -222,7 +226,7 @@ def _loop_subscriber(claim: ClaimData, config: dict[str, Any]) -> list[str]:
 def _loop_claim(claim: ClaimData) -> list[str]:
     """Loop 2300: the claim itself (CLM, optional prior-auth REF, HI diagnoses)."""
     segments = [
-        _segment(
+        make_segment(
             "CLM",
             claim.patient_control_number,  # CLM01: our claim reference
             format_amount(claim.total_charge),  # CLM02: total claim charge
@@ -238,14 +242,14 @@ def _loop_claim(claim: ClaimData) -> list[str]:
         )
     ]
     if claim.prior_auth_number:  # REF*G1: only present when the claim carries a prior authorization
-        segments.append(_segment("REF", PRIOR_AUTH_QUALIFIER, claim.prior_auth_number))
+        segments.append(make_segment("REF", PRIOR_AUTH_QUALIFIER, claim.prior_auth_number))
     diagnosis_elements = []
     for position, code in enumerate(claim.diagnosis_codes):
         qualifier = DIAGNOSIS_QUALIFIER_PRINCIPAL if position == 0 else DIAGNOSIS_QUALIFIER_OTHER
         diagnosis_elements.append(
             f"{qualifier}{SUB_ELEMENT}{code.replace('.', '')}"
         )  # ICD-10 has no dot in X12
-    segments.append(_segment("HI", *diagnosis_elements))
+    segments.append(make_segment("HI", *diagnosis_elements))
     return segments
 
 
@@ -254,8 +258,8 @@ def _loop_service_lines(claim: ClaimData) -> list[str]:
     segments: list[str] = []
     for line_number, line in enumerate(claim.service_lines, start=1):
         segments += [
-            _segment("LX", str(line_number)),  # LX01: line counter
-            _segment(
+            make_segment("LX", str(line_number)),  # LX01: line counter
+            make_segment(
                 "SV1",
                 f"{PRODUCT_QUALIFIER_HCPCS}{SUB_ELEMENT}{line.procedure_code}",  # SV101: CPT code
                 format_amount(line.charge),  # SV102: line charge
@@ -265,7 +269,7 @@ def _loop_service_lines(claim: ClaimData) -> list[str]:
                 "",
                 "1",  # SV107: diagnosis pointer -> first HI diagnosis
             ),
-            _segment("DTP", SERVICE_DATE_QUALIFIER, DATE_FORMAT_QUALIFIER, line.service_date),
+            make_segment("DTP", SERVICE_DATE_QUALIFIER, DATE_FORMAT_QUALIFIER, line.service_date),
         ]
     return segments
 
@@ -284,7 +288,7 @@ def build_837p(
     """
     interchange = config["interchange"]
     transaction_set = (
-        [_segment("ST", TRANSACTION_SET_ID, "0001", IMPLEMENTATION_REFERENCE)]
+        [make_segment("ST", TRANSACTION_SET_ID, "0001", IMPLEMENTATION_REFERENCE)]
         + _loop_header(claim, config, now, interchange_control_number)
         + _loop_billing_provider(config)
         + _loop_subscriber(claim, config)
@@ -292,8 +296,8 @@ def build_837p(
         + _loop_service_lines(claim)
     )
     # SE01 counts every segment from ST through SE inclusive, so add one for SE itself.
-    transaction_set.append(_segment("SE", str(len(transaction_set) + 1), "0001"))
-    group_header = _segment(
+    transaction_set.append(make_segment("SE", str(len(transaction_set) + 1), "0001"))
+    group_header = make_segment(
         "GS",
         FUNCTIONAL_ID_CODE,
         interchange["sender_id"],
@@ -305,8 +309,8 @@ def build_837p(
         IMPLEMENTATION_REFERENCE,
     )  # GS06 group control number 1 and GS07 X = X12 responsible agency
     trailer = [
-        _segment("GE", "1", "1"),  # GE01: number of transaction sets; GE02 matches GS06
-        _segment(
+        make_segment("GE", "1", "1"),  # GE01: number of transaction sets; GE02 matches GS06
+        make_segment(
             "IEA", "1", f"{interchange_control_number:09d}"
         ),  # IEA01 groups; IEA02 matches ISA13
     ]
