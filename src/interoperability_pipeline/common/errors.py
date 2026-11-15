@@ -34,3 +34,7 @@ class FhirError(PipelineError):
 
 class X12FormatError(PipelineError):
     """An X12 file did not follow the structure the tokenizer or parser requires."""
+
+
+class SmartAuthError(PipelineError):
+    """A SMART login step failed (discovery, state mismatch, refused or failed token exchange)."""

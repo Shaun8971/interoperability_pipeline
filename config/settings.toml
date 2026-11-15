@@ -33,3 +33,26 @@ MERCY = "http://mercy-general.example.org/lab-result"
 # HL7 timestamps carry no time zone, but FHIR dateTimes with a time must. This is the
 # zone the sending hospital's clocks use. Per-hospital, so it moves to config/sources in Module 4.
 timezone = "America/New_York"
+
+[portal]
+host = "127.0.0.1"  # the portal only listens on this machine
+port = 8000
+# Which profile below to use. "sandbox" = SMART login against the SMART Health IT sandbox.
+# "local" = no login, straight to our own HAPI server. Override: --profile local
+profile = "sandbox"
+
+[portal.profiles.sandbox]
+# Standalone *patient* launch simulated by https://launch.smarthealthit.org . The long path
+# segment is the launcher's own base64url-encoded config: [3 = patient-standalone, ..., 0 = public
+# client, 2 = PKCE always required]. Format: smart-launcher-v2 src/isomorphic/codec.ts.
+fhir_base_url = "https://launch.smarthealthit.org/v/r4/sim/WzMsIiIsIiIsIkFVVE8iLDAsMCwwLCIiLCIiLCIiLCIiLCIiLCIiLCIiLDAsMiwiIl0/fhir"
+auth = "smart"
+client_id = "interoperability-pipeline-portal"  # public client: the sandbox needs no registration
+redirect_uri = "http://localhost:8000/callback"  # where the browser returns after login
+# launch/patient = "let me pick the patient at login"; openid + fhirUser = who logged in;
+# the rest = read-only access to the three resource types the portal shows.
+scope = "launch/patient openid fhirUser patient/Patient.read patient/Encounter.read patient/ExplanationOfBenefit.read"
+
+[portal.profiles.local]
+fhir_base_url = "http://localhost:8080/fhir"  # our HAPI server: open, no login
+auth = "none"
