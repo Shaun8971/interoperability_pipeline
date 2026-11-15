@@ -14,26 +14,6 @@ port = 2575
 # Seconds the sender waits for an ACK before treating the message as unacknowledged.
 ack_timeout_seconds = 3
 
-[identifier_systems]
-# Maps the assigning authority in PID-3.4 to the FHIR identifier "system" URI.
-# Two hospitals can both have an MRN12345; the system URI tells them apart.
-# Per-hospital differences belong here (and later in config/sources/), not in code.
-MERCY = "http://mercy-general.example.org/mrn"
-
-[visit_identifier_systems]
-# Maps the PID-3.4 authority to the FHIR identifier "system" for visit numbers (PV1-19).
-MERCY = "http://mercy-general.example.org/visit"
-
-[observation_identifier_systems]
-# Maps the PID-3.4 authority to the identifier system for lab results. An Observation has no
-# natural ID of its own, so we build one: <OBR-3 order number>-<OBX-1 set ID>.
-MERCY = "http://mercy-general.example.org/lab-result"
-
-[hl7v2]
-# HL7 timestamps carry no time zone, but FHIR dateTimes with a time must. This is the
-# zone the sending hospital's clocks use. Per-hospital, so it moves to config/sources in Module 4.
-timezone = "America/New_York"
-
 [portal]
 host = "127.0.0.1"  # the portal only listens on this machine
 port = 8000
@@ -56,3 +36,7 @@ scope = "launch/patient openid fhirUser patient/Patient.read patient/Encounter.r
 [portal.profiles.local]
 fhir_base_url = "http://localhost:8080/fhir"  # our HAPI server: open, no login
 auth = "none"
+
+[paths]
+# Where runtime data goes (git-ignored): the event log and the error queue.
+data_directory = "data"

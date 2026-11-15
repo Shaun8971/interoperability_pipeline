@@ -1,0 +1,27 @@
+# St. Luke's (Hospital B): formats things differently from Hospital A, handled by config alone.
+#   - the patient identifier is in PID-2, not PID-3
+#   - clocks are in US Central time
+#   - potassium is reported with the local code "K" (coding system STL) instead of LOINC
+
+[source]
+name = "hospital_b"
+sending_facility = "ST_LUKES"
+timezone = "America/Chicago"
+patient_id_field = 2
+
+[patient_identifier_systems]
+STLUKES = "http://stlukes.example.org/mrn"
+
+[visit_identifier_systems]
+STLUKES = "http://stlukes.example.org/visit"
+
+[observation_identifier_systems]
+STLUKES = "http://stlukes.example.org/lab-result"
+
+[coding_systems]
+LN = "http://loinc.org"
+
+[code_translations]
+# "<coding system>|<local code>" -> the standard code it means. Reviewed by a human once,
+# then reused for every message: we never guess a translation at run time.
+"STL|K" = { system = "http://loinc.org", code = "2823-3", display = "Potassium [Moles/volume] in Serum or Plasma" }

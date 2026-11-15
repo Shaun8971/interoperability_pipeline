@@ -1,0 +1,24 @@
+# Everything that is specific to Mercy General (Hospital A). A new hospital = a new file like this.
+# The pipeline picks the file by MSH-4 (sending facility); no code changes are needed.
+
+[source]
+name = "hospital_a"
+sending_facility = "MERCY_GENERAL"  # MSH-4 value that selects this file
+timezone = "America/New_York"  # HL7 timestamps carry no zone; this is the hospital's local zone
+patient_id_field = 3  # which PID field holds the patient identifier (standard: PID-3)
+
+[patient_identifier_systems]
+# PID-3.4 assigning authority -> FHIR identifier system URI
+MERCY = "http://mercy-general.example.org/mrn"
+
+[visit_identifier_systems]
+MERCY = "http://mercy-general.example.org/visit"
+
+[observation_identifier_systems]
+MERCY = "http://mercy-general.example.org/lab-result"
+
+[coding_systems]
+# OBX-3.3 coding system name -> FHIR code system URI (codes in these systems are used as-is)
+LN = "http://loinc.org"
+
+# [code_translations] maps this hospital's LOCAL lab codes to standard ones. None for Hospital A.

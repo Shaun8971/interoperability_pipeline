@@ -14,12 +14,17 @@ from datetime import datetime
 from pathlib import Path
 
 from interoperability_pipeline.common.errors import MappingError
-from interoperability_pipeline.common.settings import CLAIMS_SETTINGS_PATH, load_settings
+from interoperability_pipeline.common.event_log import OUTCOME_ACCEPTED, OUTCOME_REJECTED, EventLog
+from interoperability_pipeline.common.settings import (
+    CLAIMS_SETTINGS_PATH,
+    PROJECT_ROOT,
+    load_settings,
+)
 from interoperability_pipeline.fhir.client import FhirClient
 from interoperability_pipeline.hl7v2.mappers import (
     identifier_search_value,
-    source_config_from_settings,
 )
+from interoperability_pipeline.mapping.sources import load_source
 from interoperability_pipeline.x12.eob_mapper import coverage_from_remittance, eob_from_remittance
 from interoperability_pipeline.x12.parser_835 import parse_835, reconcile
 
@@ -39,7 +44,7 @@ def store_remittance(text: str, client: FhirClient, settings: dict) -> list[str]
     problems = reconcile(remittance)
     if problems:  # never post an unbalanced remittance
         raise MappingError("835 does not balance: " + "; ".join(problems))
-    config = source_config_from_settings(settings)
+    config = load_source("hospital_a")
     patient_system = config.patient_identifier_systems[HOSPITAL_AUTHORITY]
     patient_id = client.find_id(
         "Patient", {"identifier": identifier_search_value(patient_system, JANE_MRN)}
@@ -77,12 +82,36 @@ def store_remittance(text: str, client: FhirClient, settings: dict) -> list[str]
 def main() -> None:
     settings = load_settings()
     client = FhirClient(settings["fhir"]["base_url"], settings["fhir"]["timeout_seconds"])
+    event_log = EventLog(PROJECT_ROOT / settings["paths"]["data_directory"])
+    text = Path(sys.argv[1]).read_text()
     try:
-        for line in store_remittance(Path(sys.argv[1]).read_text(), client, settings):
-            print(line)
+        written = store_remittance(text, client, settings)
     except MappingError as error:
         print(f"REFUSED: {error}")
+        event_log.record(
+            source="payer",
+            message_type="835",
+            control_id=Path(sys.argv[1]).name,
+            outcome=OUTCOME_REJECTED,
+            detail=str(error),
+        )
+        event_log.enqueue(
+            kind=OUTCOME_REJECTED,
+            source="payer",
+            control_id=Path(sys.argv[1]).name,
+            reasons=[str(error)],
+            raw_message=text,
+        )
         raise SystemExit(1) from error
+    event_log.record(
+        source="payer",
+        message_type="835",
+        control_id=Path(sys.argv[1]).name,
+        outcome=OUTCOME_ACCEPTED,
+        resources=written,
+    )
+    for line in written:
+        print(line)
 
 
 if __name__ == "__main__":

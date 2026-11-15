@@ -18,8 +18,8 @@ from interoperability_pipeline.common.errors import MappingError
 from interoperability_pipeline.fhir.client import FhirClient
 from interoperability_pipeline.hl7v2.mappers import (
     identifier_search_value,
-    source_config_from_settings,
 )
+from interoperability_pipeline.mapping.sources import load_source
 
 # --- Constants --------------------------------------------------------------------------
 HOSPITAL_AUTHORITY = "MERCY"  # PID-3.4 authority whose identifier systems we search with
@@ -77,7 +77,7 @@ def load_claim_data(
     Example:
         load_claim_data(client, settings, claims).total_charge -> Decimal("1200.00")
     """
-    config = source_config_from_settings(settings)
+    config = load_source("hospital_a")
     patient_system = config.patient_identifier_systems[HOSPITAL_AUTHORITY]
     visit_system = config.visit_identifier_systems[HOSPITAL_AUTHORITY]
     patients = client.search(

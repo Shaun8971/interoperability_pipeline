@@ -15,7 +15,7 @@ Inputs / outputs: list of segments + config -> FHIR resource dict.
 How to extend: add one ``<resource>_from_hl7`` function per resource; keep it pure.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -37,7 +37,11 @@ HL7_TIMESTAMP_LENGTH = 14
 TRIGGER_TO_ENCOUNTER_STATUS = {
     "A01": "in-progress",  # admit: the visit has started
     "A03": "finished",  # discharge: the visit is over
+    "A13": "in-progress",  # cancel discharge: the patient is still here
 }
+# Extension recording WHEN the event that last changed an Encounter happened (EVN-2). Used to
+# refuse older events that arrive late (see the stale-message check in the listener).
+LAST_EVENT_EXTENSION_URL = "http://interop-pipeline.example.org/StructureDefinition/last-event-time"
 # PV1-2 patient class (HL7 table 0004) -> v3 ActCode used by Encounter.class
 ENCOUNTER_CLASS_SYSTEM = "http://terminology.hl7.org/CodeSystem/v3-ActCode"
 # Observation constants
@@ -46,8 +50,7 @@ OBSERVATION_CATEGORY_LABORATORY = "laboratory"  # every ORU^R01 result we handle
 INTERPRETATION_SYSTEM = "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation"
 UCUM_SYSTEM = "http://unitsofmeasure.org"  # FHIR's standard unit system
 VALUE_TYPE_NUMERIC = "NM"  # OBX-2 value type: numeric
-# OBX-3.3 coding system name -> FHIR code system URI. Anything else is refused (see Module 4).
-CODING_SYSTEM_MAP = {"LN": "http://loinc.org"}
+DEFAULT_CODING_SYSTEMS = {"LN": "http://loinc.org"}  # used when a source file lists none
 # OBX-11 result status (HL7 table 0085) -> FHIR Observation.status
 RESULT_STATUS_MAP = {"F": "final", "P": "preliminary", "C": "corrected", "X": "cancelled"}
 PATIENT_CLASS_MAP = {"I": "IMP", "O": "AMB", "E": "EMER"}  # inpatient, outpatient, emergency
@@ -61,22 +64,19 @@ XAD_STREET, XAD_CITY, XAD_STATE, XAD_POSTAL_CODE = 0, 2, 3, 4
 
 @dataclass(frozen=True)
 class SourceConfig:
-    """Everything that differs per sending hospital. Module 4 loads one per source file."""
+    """Everything that differs per sending hospital (one file in config/sources/)."""
 
     patient_identifier_systems: dict[str, str]  # PID-3.4 authority -> identifier system URI
-    visit_identifier_systems: dict[str, str]  # PID-3.4 authority -> visit-number system URI
-    observation_identifier_systems: dict[str, str]  # PID-3.4 authority -> lab-result system URI
+    visit_identifier_systems: dict[str, str]  # authority -> visit-number system URI
+    observation_identifier_systems: dict[str, str]  # authority -> lab-result system URI
     timezone: str  # IANA zone name for HL7 timestamps, e.g. "America/New_York"
-
-
-def source_config_from_settings(settings: dict[str, Any]) -> SourceConfig:
-    """Build the SourceConfig from the parsed settings.toml."""
-    return SourceConfig(
-        patient_identifier_systems=settings["identifier_systems"],
-        visit_identifier_systems=settings["visit_identifier_systems"],
-        observation_identifier_systems=settings["observation_identifier_systems"],
-        timezone=settings["hl7v2"]["timezone"],
-    )
+    patient_id_field: int = 3  # which PID field holds the patient identifier (standard: 3)
+    # OBX-3.3 coding system name -> FHIR code system URI; codes in these are used as-is
+    coding_systems: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_CODING_SYSTEMS))
+    # "<system>|<local code>" -> {system, code, display}: reviewed translations of local codes
+    code_translations: dict[str, dict[str, str]] = field(default_factory=dict)
+    name: str = "unnamed"  # file name, for logs
+    sending_facility: str = ""  # MSH-4 value that selects this config
 
 
 def identifier_search_value(system: str, value: str) -> str:
@@ -90,7 +90,7 @@ def identifier_search_value(system: str, value: str) -> str:
 
 
 def patient_identifier(segments: list[list[str]], config: SourceConfig) -> dict[str, str]:
-    """Return {"system": ..., "value": ...} for the patient in PID-3.
+    """Return {"system": ..., "value": ...} for the patient (field set by config, normally PID-3).
 
     Raises MappingError if the assigning authority is not in config: guessing a system
     could merge two different people, so we refuse instead.
@@ -99,9 +99,10 @@ def patient_identifier(segments: list[list[str]], config: SourceConfig) -> dict[
         PID-3 'MRN12345^^^MERCY^MR' -> {"system": ".../mrn", "value": "MRN12345"}
     """
     pid = _require_pid(segments)
-    parts = split_components(get_field(pid, 3).split("~")[0])  # PID-3: first repetition only
+    # first repetition only of the configured identifier field (PID-3, or PID-2 for some hospitals)
+    parts = split_components(get_field(pid, config.patient_id_field).split("~")[0])
     parts += [""] * (CX_TYPE_CODE + 1 - len(parts))  # pad so indexing is always safe
-    authority = _patient_authority(segments)
+    authority = _patient_authority(segments, config)
     if authority not in config.patient_identifier_systems:
         raise MappingError(f"unknown assigning authority {authority!r} in PID-3")
     system = config.patient_identifier_systems[authority]
@@ -120,7 +121,8 @@ def patient_from_hl7(segments: list[list[str]], config: SourceConfig) -> dict[st
     """
     pid = _require_pid(segments)
     identifier = patient_identifier(segments, config)
-    type_code = (split_components(get_field(pid, 3)) + [""] * 5)[CX_TYPE_CODE]  # PID-3.5: MR
+    identifier_text = get_field(pid, config.patient_id_field)  # PID-3 (or the configured field)
+    type_code = (split_components(identifier_text) + [""] * 5)[CX_TYPE_CODE]  # CX.5: e.g. MR
 
     name_parts = split_components(get_field(pid, 5))  # PID-5: family^given^middle
     given_names = [part for part in name_parts[1:3] if part]
@@ -164,7 +166,7 @@ def encounter_identifier(segments: list[list[str]], config: SourceConfig) -> dic
     visit_number = get_field(pv1, 19).strip()  # PV1-19: visit number
     if not visit_number:
         raise MappingError("PV1-19 visit number is empty; cannot identify the Encounter")
-    authority = _patient_authority(segments)  # the visit belongs to the same hospital
+    authority = _patient_authority(segments, config)  # the visit belongs to the same hospital
     if authority not in config.visit_identifier_systems:
         raise MappingError(f"no visit identifier system configured for {authority!r}")
     return {"system": config.visit_identifier_systems[authority], "value": visit_number}
@@ -211,7 +213,21 @@ def encounter_from_hl7(
     }
     if period:
         encounter["period"] = period  # PV1-44/45 -> Encounter.period
+    encounter["extension"] = [  # EVN-2 (or MSH-7) -> when this change happened, for ordering
+        {"url": LAST_EVENT_EXTENSION_URL, "valueDateTime": message_event_time(segments, config)}
+    ]
     return encounter
+
+
+def message_event_time(segments: list[list[str]], config: SourceConfig) -> str:
+    """When the event happened: EVN-2 if present, else the message time MSH-7, as a FHIR dateTime.
+
+    Example: EVN-2 '20261116110000' with zone America/New_York -> '2026-11-16T11:00:00-05:00'
+    """
+    evn = find_segment(segments, "EVN")
+    msh = _require_segment(segments, "MSH")
+    raw = (get_field(evn, 2) if evn else "") or get_field(msh, 7)  # EVN-2 recorded, MSH-7 sent
+    return _hl7_timestamp_to_fhir(raw, config.timezone)
 
 
 def observation_from_hl7(
@@ -234,7 +250,20 @@ def observation_from_hl7(
 
     code_parts = split_components(get_field(obx, 3)) + [""] * 3  # OBX-3: id^text^coding system
     code_id, code_text, coding_system_name = code_parts[:3]
-    if coding_system_name not in CODING_SYSTEM_MAP:
+    translation = config.code_translations.get(f"{coding_system_name}|{code_id}")
+    if translation:  # a local code a human has already mapped to a standard one (see config)
+        coding = {
+            "system": translation["system"],
+            "code": translation["code"],
+            "display": translation.get("display", code_text),
+        }
+    elif coding_system_name in config.coding_systems:  # already a standard code system
+        coding = {
+            "system": config.coding_systems[coding_system_name],
+            "code": code_id,
+            "display": code_text,
+        }
+    else:  # never guess what an unknown local code means
         raise MappingError(
             f"OBX-3 code {code_id!r} uses unrecognised coding system {coding_system_name!r}; "
             "refusing to guess what it means"
@@ -265,13 +294,7 @@ def observation_from_hl7(
             }
         ],
         "code": {  # OBX-3 -> Observation.code
-            "coding": [
-                {
-                    "system": CODING_SYSTEM_MAP[coding_system_name],
-                    "code": code_id,
-                    "display": code_text,
-                }
-            ],
+            "coding": [coding],
             "text": code_text,
         },
         "subject": {"reference": f"Patient/{patient_id}"},
@@ -308,7 +331,7 @@ def _observation_identifier(
     set_id = get_field(obx, 1).strip()  # OBX-1: set ID within the message
     if not order_number or not set_id:
         raise MappingError("OBR-3 order number or OBX-1 set ID is empty; cannot identify result")
-    authority = _patient_authority(segments)
+    authority = _patient_authority(segments, config)
     if authority not in config.observation_identifier_systems:
         raise MappingError(f"no result identifier system configured for {authority!r}")
     return {
@@ -317,10 +340,10 @@ def _observation_identifier(
     }
 
 
-def _patient_authority(segments: list[list[str]]) -> str:
-    """PID-3.4: the assigning authority, e.g. 'MERCY'."""
+def _patient_authority(segments: list[list[str]], config: SourceConfig) -> str:
+    """CX.4 of the configured identifier field: the assigning authority, e.g. 'MERCY'."""
     pid = _require_pid(segments)
-    parts = split_components(get_field(pid, 3).split("~")[0]) + [""] * 5
+    parts = split_components(get_field(pid, config.patient_id_field).split("~")[0]) + [""] * 5
     return parts[CX_ASSIGNING_AUTHORITY]
 
 

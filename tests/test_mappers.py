@@ -22,7 +22,12 @@ SOURCE_CONFIG = SourceConfig(
     visit_identifier_systems={"MERCY": "http://mercy-general.example.org/visit"},
     observation_identifier_systems={"MERCY": "http://mercy-general.example.org/lab-result"},
     timezone="America/New_York",
+    name="hospital_a",
+    sending_facility="MERCY_GENERAL",
 )
+
+
+SOURCES = {"MERCY_GENERAL": SOURCE_CONFIG}
 
 
 def load_text(file_name: str) -> str:
@@ -100,13 +105,13 @@ def test_resending_the_same_message_never_duplicates_jane() -> None:
         pytest.skip("FHIR server not running")
     search = {"identifier": "http://mercy-general.example.org/mrn|MRN12345"}
     for _ in range(3):
-        ack_text, _ = process_message(load_text("adt_a01.hl7"), client, SOURCE_CONFIG)
+        ack_text, _ = process_message(load_text("adt_a01.hl7"), client, SOURCES)
         assert "MSA|AA|" in ack_text
     assert client.count("Patient", search) == 1
     visit = {"identifier": "http://mercy-general.example.org/visit|V0001"}
     assert client.count("Encounter", visit) == 1  # the visit is also stored once
     for _ in range(2):
-        ack_text, _ = process_message(load_text("oru_r01.hl7"), client, SOURCE_CONFIG)
+        ack_text, _ = process_message(load_text("oru_r01.hl7"), client, SOURCES)
         assert "MSA|AA|" in ack_text
     result = {"identifier": "http://mercy-general.example.org/lab-result|LAB0001-1"}
     assert client.count("Observation", result) == 1  # the potassium is stored once
@@ -114,5 +119,5 @@ def test_resending_the_same_message_never_duplicates_jane() -> None:
 
 def test_fhir_server_down_gives_ar_not_a_silent_drop() -> None:
     dead_client = FhirClient("http://127.0.0.1:9/fhir", timeout_seconds=1)  # nothing listens on 9
-    ack_text, _ = process_message(load_text("adt_a01.hl7"), dead_client, SOURCE_CONFIG)
+    ack_text, _ = process_message(load_text("adt_a01.hl7"), dead_client, SOURCES)
     assert "MSA|AR|MSG00001|" in ack_text

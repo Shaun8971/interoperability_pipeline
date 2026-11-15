@@ -19,8 +19,8 @@ from interoperability_pipeline.common.settings import CLAIMS_SETTINGS_PATH, load
 from interoperability_pipeline.fhir.client import FhirClient
 from interoperability_pipeline.hl7v2.mappers import (
     identifier_search_value,
-    source_config_from_settings,
 )
+from interoperability_pipeline.mapping.sources import load_source
 
 # --- Constants ------------------------------------------------------------------------
 CONDITION_CATEGORY_SYSTEM = "http://terminology.hl7.org/CodeSystem/condition-category"
@@ -88,7 +88,7 @@ def seed() -> None:
     """Find Jane's Patient and Encounter, then write the Condition and Procedures."""
     settings = load_settings()
     claims = load_settings(CLAIMS_SETTINGS_PATH)
-    config = source_config_from_settings(settings)
+    config = load_source("hospital_a")
     client = FhirClient(settings["fhir"]["base_url"], settings["fhir"]["timeout_seconds"])
 
     patient_system = config.patient_identifier_systems["MERCY"]

@@ -31,3 +31,6 @@ keys/
 # Claude Code instructions (private prompts, kept local only)
 CLAUDE.md
 ROADMAP.md
+
+# Runtime data (event log, error queue)
+data/

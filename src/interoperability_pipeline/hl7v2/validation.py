@@ -27,11 +27,12 @@ MESSAGE_CODE_RESULT = "ORU"  # MSH-9.1 for lab/observation results
 SUPPORTED_MESSAGE_TYPES = {
     ("ADT", "A01"),  # admit / visit notification
     ("ADT", "A03"),  # discharge / end visit
+    ("ADT", "A13"),  # cancel discharge
     ("ORU", "R01"),  # unsolicited observation result (lab)
 }
 
 
-def validate_message(segments: list[list[str]]) -> list[str]:
+def validate_message(segments: list[list[str]], patient_id_field: int = 3) -> list[str]:
     """Return the reasons to reject this message; an empty list means accept.
 
     Why a list and not a boolean: the sender (and the logs) learn *everything* wrong
@@ -58,8 +59,8 @@ def validate_message(segments: list[list[str]]) -> list[str]:
     pid = find_segment(segments, SEGMENT_PID)
     if pid is None:
         problems.append("missing PID segment")
-    elif not get_field(pid, 3).strip():  # PID-3: patient identifier list (the MRN)
-        problems.append("PID-3 patient identifier is empty")
+    elif not get_field(pid, patient_id_field).strip():  # PID-3 normally: the patient identifier
+        problems.append(f"PID-{patient_id_field} patient identifier is empty")
     if message_type[0] == MESSAGE_CODE_RESULT and not find_segments(segments, SEGMENT_OBX):
         problems.append("result message has no OBX segment")  # nothing to store would be silent
     return problems

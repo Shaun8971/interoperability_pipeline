@@ -64,12 +64,20 @@ class FakeFhirClient:
     def conditional_update(self, resource_type, search_params, resource):  # type: ignore[no-untyped-def]
         return FhirWriteResult(resource_type, "1", created=True)
 
+    def search(self, resource_type, search_params):  # type: ignore[no-untyped-def]
+        return []  # nothing stored yet, so nothing can be stale
+
+    def find_id(self, resource_type, search_params):  # type: ignore[no-untyped-def]
+        return None
+
 
 SOURCE_CONFIG = SourceConfig(
     patient_identifier_systems={"MERCY": "http://mercy-general.example.org/mrn"},
     visit_identifier_systems={"MERCY": "http://mercy-general.example.org/visit"},
     observation_identifier_systems={"MERCY": "http://mercy-general.example.org/lab-result"},
     timezone="America/New_York",
+    name="hospital_a",
+    sending_facility="MERCY_GENERAL",
 )
 
 
@@ -77,7 +85,8 @@ def _round_trip(message_text: str) -> list[str]:
     """Send a framed message through handle_connection; return the ACK's MSA fields."""
     sender, receiver = socket.socketpair()
     worker = threading.Thread(
-        target=handle_connection, args=(receiver, FakeFhirClient(), SOURCE_CONFIG)
+        target=handle_connection,
+        args=(receiver, FakeFhirClient(), {"MERCY_GENERAL": SOURCE_CONFIG}),
     )
     worker.start()
     sender.sendall(frame(message_text))

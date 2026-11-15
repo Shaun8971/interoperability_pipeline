@@ -37,8 +37,8 @@ from interoperability_pipeline.common.settings import load_settings
 from interoperability_pipeline.fhir.client import FhirClient
 from interoperability_pipeline.hl7v2.mappers import (
     identifier_search_value,
-    source_config_from_settings,
 )
+from interoperability_pipeline.mapping.sources import load_source
 from interoperability_pipeline.smart.client import (
     SmartEndpoints,
     build_authorize_url,
@@ -292,7 +292,7 @@ def make_handler(profile_name: str, profile: dict[str, Any], settings: dict[str,
                     return
             else:
                 client = FhirClient(fhir_base, HTTP_TIMEOUT_SECONDS)
-                config = source_config_from_settings(settings)
+                config = load_source("hospital_a")
                 patient_id = (
                     client.find_id(
                         "Patient",

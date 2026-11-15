@@ -78,3 +78,21 @@ One entry per checkpoint: the concept, what we built, what I got wrong and the c
 - **Built:** `smart/backend_services.py` (key pair, JWKS, signed assertion, system token; the sandbox registers the public key via its launch URL), PyJWT + cryptography added only for the RSA signature (stdlib cannot sign with RSA). Private key in `keys/` (git-ignored).
 - **What I got wrong / refined:** I mentioned a Firebase server; the server is our FHIR server (HAPI locally, the sandbox here). I said "authentication" for everything; SMART also adds *authorization* (scopes, patient limit).
 - **Sources:** https://hl7.org/fhir/smart-app-launch/backend-services.html , https://datatracker.ietf.org/doc/html/rfc7519
+
+## Checkpoint 4.1: Predict, then break
+
+- **Inputs and results (current pipeline):** (1) MRN in PID-2 -> LOUD (AE: PID-3 empty). (2) Local lab code `K+` -> LOUD (AE: unrecognised coding system, refusing to guess). (3) A plain duplicate -> harmless (conditional update, version unchanged). (4) A13 -> LOUD at the time (unsupported type); since then A13 is supported. (5) 835 that does not balance -> LOUD (refused, nothing stored). (6) Refused scope -> handled visibly (the portal shows only what was granted and says why).
+- **My predictions:** right on 1, 2 and 3; wrong on 4 (I said WRONG DATA, it was LOUD) and 5 (I said silent or wrong data, it was LOUD).
+- **The silent failure:** an OLD admit arriving after the discharge flipped Jane's visit from `finished` (with an end time) back to `in-progress`. ACK was AA and the log showed no warning: WRONG DATA, the most dangerous kind, because nobody finds out and the bad data gets used later.
+- **Fix:** each Encounter stores the time of the event that last changed it (EVN-2, in an extension); an older event is not applied, is ACKed AA with a note, and goes to the error queue.
+- **Checkpoint question (unanswered live; answer in GUIDE.md):** which failures were silent, and why are they the most dangerous?
+
+## Checkpoint 4.2: Fix with config
+
+- **Built:** one TOML file per hospital in `config/sources/` (I used TOML instead of YAML: Python reads it with the standard library, so no new dependency). Hospital B (St. Luke's) puts the MRN in PID-2, uses Central time, and reports potassium with a local code that config translates to LOINC 2823-3. It works with zero code changes (tested). An unlisted hospital is refused (`unknown sending facility`). Hospital A still refuses an untranslated local code.
+- **Checkpoint question (unanswered live; answer in GUIDE.md):** what belongs in config and what in code, and why?
+
+## Checkpoint 4.3: Watch it
+
+- **Built:** event log + error queue (`common/event_log.py`, raw message kept for replay) and a volume report with three detectors (`common/report.py`): UNKNOWN data -> error queue; MISSING data -> volume checks (quiet sources, admits vs discharges); WRONG-BUT-BELIEVABLE -> stale-event and balance checks. `run_journey.py` runs everything and prints a trace by control ID.
+- **Checkpoint question (unanswered live; answer in GUIDE.md):** which detector catches which kind of failure?
