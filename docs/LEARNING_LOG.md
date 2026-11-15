@@ -70,3 +70,11 @@ One entry per checkpoint: the concept, what we built, what I got wrong and the c
 - **Fewer scopes:** requesting only `patient/Patient.read` was granted exactly; the portal's scope check then hides Encounter and EOB and explains why. The sandbox itself does not refuse out-of-scope reads, so the portal must check.
 - **What I got wrong / how this went:** I could not answer the three questions in the abstract (Safari hides the redirect, so the flow was invisible). A step-by-step real run made it clear. I should have shown a run before asking.
 - **Sources:** https://hl7.org/fhir/smart-app-launch/app-launch.html#step-3-app-exchanges-authorization-code-for-access-token , https://datatracker.ietf.org/doc/html/rfc7636
+
+## Checkpoint 3.3: Machines and the open server
+
+- **Concept:** SMART Backend Services lets a *program* get a system token with no person: it signs a short-lived JWT (client assertion: iss, sub, aud = token URL, exp, jti) with its **private key** (RS256); the server verifies with the registered **public key** and returns a token (here `system/*.read`, 600 s, no patient). The private key never leaves the machine; only a signature does, which is useless to an interceptor after it expires. A stranger's key was refused: `401 invalid_client ... invalid signature`.
+- **What SMART adds over the open local server:** *authentication* (who are you?) and *authorization* (what may you do: scopes, the one patient the token covers, expiry). The local HAPI server has neither: anyone who can reach port 8080 can read every patient. The portal ran against it with no login.
+- **Built:** `smart/backend_services.py` (key pair, JWKS, signed assertion, system token; the sandbox registers the public key via its launch URL), PyJWT + cryptography added only for the RSA signature (stdlib cannot sign with RSA). Private key in `keys/` (git-ignored).
+- **What I got wrong / refined:** I mentioned a Firebase server; the server is our FHIR server (HAPI locally, the sandbox here). I said "authentication" for everything; SMART also adds *authorization* (scopes, patient limit).
+- **Sources:** https://hl7.org/fhir/smart-app-launch/backend-services.html , https://datatracker.ietf.org/doc/html/rfc7519

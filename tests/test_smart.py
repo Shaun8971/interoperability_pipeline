@@ -108,3 +108,45 @@ def test_callback_reporting_an_error_is_shown_not_crashed(portal_url: str) -> No
 def test_record_requires_login(portal_url: str) -> None:
     response = requests.get(f"{portal_url}/record", allow_redirects=False, timeout=5)
     assert response.status_code == 302 and response.headers["Location"] == "/"
+
+
+# --- Backend services (signing) ------------------------------------------------------------------
+def test_client_assertion_is_signed_and_has_the_required_claims() -> None:
+    import jwt as pyjwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from interoperability_pipeline.smart.backend_services import (
+        ASSERTION_LIFETIME_SECONDS,
+        build_client_assertion,
+    )
+
+    key = rsa.generate_private_key(65537, 2048)
+    token = build_client_assertion(key, "client-1", "https://auth.example/token", now=1_000_000)
+    claims = pyjwt.decode(
+        token,
+        key.public_key(),
+        algorithms=["RS256"],
+        audience="https://auth.example/token",
+        options={"verify_exp": False},
+    )
+    assert claims["iss"] == claims["sub"] == "client-1"
+    assert claims["exp"] == 1_000_000 + ASSERTION_LIFETIME_SECONDS
+    assert len(claims["jti"]) >= 16  # unique id so a replayed copy can be rejected
+    other_key = rsa.generate_private_key(65537, 2048)
+    with pytest.raises(pyjwt.InvalidSignatureError):  # a different public key cannot verify it
+        pyjwt.decode(
+            token,
+            other_key.public_key(),
+            algorithms=["RS256"],
+            audience="https://auth.example/token",
+            options={"verify_exp": False},
+        )
+
+
+def test_public_jwks_contains_no_private_material() -> None:
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from interoperability_pipeline.smart.backend_services import public_jwks
+
+    key = public_jwks(rsa.generate_private_key(65537, 2048))["keys"][0]
+    assert set(key) >= {"kty", "n", "e", "kid"} and not {"d", "p", "q"} & set(key)
