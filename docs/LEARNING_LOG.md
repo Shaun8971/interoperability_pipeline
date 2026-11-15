@@ -61,3 +61,12 @@ One entry per checkpoint: the concept, what we built, what I got wrong and the c
 - **Bug caught by a test:** my scope check treated `patient/Patient.write` as readable because "write" contains the letter `r`. SMART v2 permission letters (`cruds`) only count when the permission is made of those letters alone.
 - **Sandbox finding:** the SMART launcher validates a token if one is sent but has no scope check in its proxy (`validateToken(req, false)`), so it will not refuse a read outside the granted scopes. The portal therefore checks granted scopes itself.
 - **Sources:** https://hl7.org/fhir/smart-app-launch/app-launch.html , https://datatracker.ietf.org/doc/html/rfc7636 , https://github.com/smart-on-fhir/smart-launcher-v2
+
+## Checkpoint 3.2: The token
+
+- **Concept:** after the code swap the server returns a token response: `access_token` (the wristband), `patient` (who the login is for), `scope` (what was granted), `expires_in` (3600 s here). The portal takes the patient id from this response, never from a search: the server decided at login whose token this is, and a name search could show another person's record.
+- **`state` vs PKCE (shown with a narrated run against the sandbox):** `state` = a random tag sent with the login and compared on return, so a forged callback link is rejected. PKCE = the fingerprint goes out first, the secret only at the token swap, so a stolen code is useless: the thief got `401 invalid_grant ... Invalid PKCE Verifier`.
+- **Where the code comes from:** the *server* issues it after the person approves, and delivers it via a redirect of the browser to our `redirect_uri` (`/callback?code=...&state=...`). It is one-time and short-lived; the valuable token is fetched separately and directly.
+- **Fewer scopes:** requesting only `patient/Patient.read` was granted exactly; the portal's scope check then hides Encounter and EOB and explains why. The sandbox itself does not refuse out-of-scope reads, so the portal must check.
+- **What I got wrong / how this went:** I could not answer the three questions in the abstract (Safari hides the redirect, so the flow was invisible). A step-by-step real run made it clear. I should have shown a run before asking.
+- **Sources:** https://hl7.org/fhir/smart-app-launch/app-launch.html#step-3-app-exchanges-authorization-code-for-access-token , https://datatracker.ietf.org/doc/html/rfc7636
